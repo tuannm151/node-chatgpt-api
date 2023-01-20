@@ -17,6 +17,7 @@ This is a simple API server wrapper for [ChatGPT](https://chat.openai.com/chat).
 - `xvfb` (for headless Chrome)
 
 ### Installation
+
 You can install the package using
 ```
 npm i -g @waylaidwanderer/chatgpt-api
@@ -62,6 +63,13 @@ Alternatively, you can install the package locally and run it using `node index.
 2. Install dependencies with `npm install`
 3. Rename `settings.example.js` to `settings.js` in the root directory and change the settings where required.
 4. Start the server using `xvfb-run node index.js` (for headless servers) or `node index.js`
+
+### Docker deployment
+
+1. Clone this repository
+2. Rename `settings.example.js` to `settings.js` in the root directory and change the settings where required.
+3. Build docker image using dockerfile or using docker-compose to deploy
+
 
 ## Usage
 To start a conversation with ChatGPT, send a POST request to the server's `/conversation` endpoint with a JSON body in the following format:
