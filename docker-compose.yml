@@ -1,0 +1,10 @@
+version: "3"
+services:
+  chatgpt-server:
+    build: .
+    container_name: chatgpt-server
+    restart: always
+    ports:
+      - "3000:3000" # api endpoint port
+      - "8045:8045" # optional (novnc port for solving captcha manually)
+
