@@ -81,19 +81,19 @@ docker run -d --name  chatgptapi chatgptapi:latest -p 3000:3000 -p 8045:8045
 docker run -d --name  chatgptapi chatgptapi:latest -p 3000:3000 -p 8045:8045  -v /<path>/settings.js:/app/settings.js
 ```
 
-Alternatively, build and deploy using docker compose
+Alternatively, deploy using docker compose
 ```yaml
 version: "3"
 services:
   chatgpt-server:
-    build: .
+    image: mtuan/chatgpt-server:latest
     container_name: chatgpt-server
     restart: always
     ports:
       - "3000:3000" # api endpoint port
       - "8045:8045" # optional (novnc port for solving captcha manually)
     volumes:
-           # - '/<path>/settings.js:/app/settings.js' #uncomment if you want to mount settings.js
+      - '/<path>/settings.js:/app/settings.js'
 ```
 
 
