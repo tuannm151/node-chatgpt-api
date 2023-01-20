@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "xvfb-run node index.js"
+    "start-hl": "xvfb-run --server-args=\"-screen 0 1280x800x24 -ac -nolisten tcp -dpi 96 +extension RANDR\" node index.js",
+    "start": "node index.js"
   },
   "author": "waylaidwanderer",
   "license": "MIT",
