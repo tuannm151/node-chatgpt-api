@@ -29,6 +29,7 @@
     "api-wrapper"
   ],
   "dependencies": {
+    "@fastify/cors": "^8.2.0",
     "chatgpt": "^3.3.11",
     "dotenv": "^16.0.3",
     "fastify": "^4.11.0",

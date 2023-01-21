@@ -25,4 +25,10 @@ export default {
     nopechaKey: undefined,
     // Your 2Captcha API key. This will be applied to all accounts but can be overridden on a per-account basis.
     twoCaptchaKey: undefined,
+
+    // The origin to allow for CORS (optional, defaults to '*')
+    corsOrigin: ['*'],
+
+    // The auth key to use for request header Authentication (optional). Set as undefined to disable authentication. 
+    authKey: 'secret',
 }

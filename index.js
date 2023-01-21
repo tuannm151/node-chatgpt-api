@@ -3,6 +3,7 @@ import fastify from 'fastify';
 import { ChatGPTAPIBrowser } from 'chatgpt';
 import fs from 'fs';
 import { pathToFileURL } from 'url'
+import cors from '@fastify/cors';
 
 const arg = process.argv.find((arg) => arg.startsWith('--settings'));
 let path;
@@ -56,7 +57,18 @@ let currentAccountIndex = 0;
 
 const server = fastify();
 
+// configure CORS
+server.register(cors, {
+    origin: settings.corsOrigin || '*',
+});
+
 server.post('/conversation', async (request, reply) => {
+    // check for headers containing the API key
+    if (settings.authKey && request.headers['authorization'] !== settings.authKey) {
+        reply.code(401).send({ error: 'Unauthorized.' });
+        return;
+    }
+
     if (accounts.length === 0) {
         reply.code(503).send({ error: 'No sessions available.' });
         return;
