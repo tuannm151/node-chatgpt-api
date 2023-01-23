@@ -4,6 +4,8 @@ import { ChatGPTAPIBrowser } from 'chatgpt';
 import fs from 'fs';
 import { pathToFileURL } from 'url'
 import cors from '@fastify/cors';
+import ConnectDB from './db.js';
+
 
 const arg = process.argv.find((arg) => arg.startsWith('--settings'));
 let path;
@@ -27,6 +29,10 @@ if (fs.existsSync(path)) {
     process.exit(1);
 }
 
+const db = new ConnectDB();
+
+
+
 const accounts = [];
 const conversationsMap = {};
 
@@ -39,6 +45,8 @@ for (let i = 0; i < settings.accounts.length; i++) {
         // For backwards compatibility
         proxyServer: account.proxyServer || account.proxy || undefined,
     });
+
+    api.account_id = account.email;
 
     api.initSession().then(() => {
         console.log(`Session initialized for account ${i}.`);
@@ -74,31 +82,52 @@ server.post('/conversation', async (request, reply) => {
         return;
     }
 
-    const conversationId = request.body.conversationId ? request.body.conversationId.toString() : undefined;
+    let conversationId = undefined;
+    let messageId = undefined;
+
+    // search for conversationId and messageId using replyMsgId
+    if (request.body.replyMsgId) {
+        const row = db.getMessageByReplyMsgId(request.body.replyMsgId);
+        if (row) {
+            conversationId = row.conversationId;
+            messageId = row.messageId;
+        }
+    }
 
     // Conversation IDs are tied to accounts, so we need to make sure that the same account is used for the same conversation.
-    if (conversationId && conversationsMap[conversationId]) {
-        // If the conversation ID is already in the map, use the account that was used for that conversation.
-        currentAccountIndex = conversationsMap[conversationId];
+    if (conversationId) {
+        // get current account if already in the map
+        if (conversationsMap[conversationId]) {
+            currentAccountIndex = conversationsMap[conversationId];
+        } else {
+            const row = db.getAccountIdByConversationId(conversationId);
+            if (row) {
+                currentAccountIndex = accounts.findIndex((account) => account.account_id === row.accountId);
+                // set next account to create new conversation if not found available account
+                if (currentAccountIndex === -1) {
+                    currentAccountIndex = (currentAccountIndex + 1) % accounts.length;
+                    conversationId = undefined;
+                    messageId = undefined;
+                }
+            }
+        }
     } else {
-        // If the conversation ID is not in the map, use the next account.
         currentAccountIndex = (currentAccountIndex + 1) % accounts.length;
     }
 
     let result;
     let error;
     try {
-        const parentMessageId = request.body.parentMessageId ? request.body.parentMessageId.toString() : undefined;
         result = await accounts[currentAccountIndex].sendMessage(request.body.message, {
             conversationId,
-            parentMessageId,
+            parentMessageId: messageId,
         });
-        // ChatGPT ends its response with a newline character, so we need to remove it.
-        result.response = result.response.trim();
-        if (conversationId) {
-            // Save the account index for this conversation.
-            conversationsMap[conversationId] = currentAccountIndex;
+        // save if new conversationId 
+        if (!conversationsMap[result.conversationId]) {
+            conversationsMap[result.conversationId] = currentAccountIndex;
+            db.insertConversation(result.conversationId, accounts[currentAccountIndex].account_id);
         }
+        result.response = result.response.trim();
     } catch (e) {
         error = e;
     }
@@ -111,9 +140,24 @@ server.post('/conversation', async (request, reply) => {
     }
 });
 
+server.post('/message/register', async (request, reply) => {
+    try {
+        if (!request.body.conversationId || !request.body.messageId || !request.body.replyMsgId) {
+            reply.code(400).send({ error: 'Missing parameters.' });
+
+            return;
+        }
+        // insert into tbl_message
+        db.insertMessage(request.body.conversationId, request.body.messageId, request.body.replyMsgId);
+    } catch {
+        reply.code(503).send({ error: 'There was an error executing query to DB' });
+    }
+});
+
 server.listen({ port: settings.port || 3000, host: "0.0.0.0" }, (error) => {
     if (error) {
         console.error(error);
+        db.close();
         process.exit(1);
     }
 });
