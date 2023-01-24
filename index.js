@@ -12,7 +12,7 @@ let path;
 if (arg) {
     path = arg.split('=')[1];
 } else {
-    path = './settings.js';
+    path = './config/settings.js';
 }
 
 let settings;
@@ -30,8 +30,6 @@ if (fs.existsSync(path)) {
 }
 
 const db = new ConnectDB();
-
-
 
 const accounts = [];
 const conversationsMap = {};

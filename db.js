@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 
 export default class ConnectDB {
     constructor() {
-        this.db = new Database("./db.sqlite3");
+        this.db = new Database("./config/db.sqlite3");
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS tbl_conversation (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
