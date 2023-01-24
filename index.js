@@ -186,4 +186,5 @@ for (let i = 0; i < settings.accounts.length; i++) {
             db.close();
             process.exit(1);
         }
-    });
+    })
+};
