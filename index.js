@@ -52,9 +52,15 @@ for (let i = 0; i < settings.accounts.length; i++) {
     });
 
     // call `api.refreshSession()` every hour to refresh the session
+    const notiURL = settings.notificationURL;
     setInterval(() => {
         api.refreshSession().then(() => {
             console.log(`Session refreshed for account ${i}.`);
+        }).catch(() => {
+            axios.post(notiURL, {
+                "type": "error",
+                "message": `Session refresh failed for account ${i}.`
+            });
         });
     }, 60 * 60 * 1000);
 
@@ -62,6 +68,11 @@ for (let i = 0; i < settings.accounts.length; i++) {
     setInterval(() => {
         api.resetSession().then(() => {
             console.log(`Session reset for account ${i}.`);
+        }).catch(() => {
+            axios.post(notiURL, {
+                "type": "error",
+                "message": `Session reset failed for account ${i}.`
+            });
         });
     }, 24 * 60 * 60 * 1000);
 }
