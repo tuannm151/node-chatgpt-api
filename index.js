@@ -5,7 +5,7 @@ import fs from 'fs';
 import { pathToFileURL } from 'url'
 import cors from '@fastify/cors';
 import ConnectDB from './db.js';
-
+import axios from 'axios';
 
 const arg = process.argv.find((arg) => arg.startsWith('--settings'));
 let path;
