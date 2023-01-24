@@ -66,9 +66,28 @@ Alternatively, you can install the package locally and run it using `node index.
 
 ### Docker deployment
 
-1. Clone this repository
-2. Rename `settings.example.js` to `settings.js` in the root directory and change the settings where required.
-3. Build docker image using dockerfile or using docker-compose to deploy
+Build image using dockerfile
+```sh
+# build image
+docker build --pull --rm -f "Dockerfile" -t chatgptapi:latest "."
+
+docker run -d --name  chatgptapi chatgptapi:latest -p 3000:3000 -p 8045:8045  -v /<path>/settings.js:/app/settings.js
+```
+
+Alternatively, deploy using docker compose
+```yaml
+version: "3"
+services:
+  chatgpt-server:
+    build: .
+    container_name: chatgpt-server
+    restart: always
+    ports:
+      - "3000:3000" # api endpoint port
+      - "8045:8045" # optional (novnc port for solving captcha manually)
+    volumes:
+      - /<path>/settings.js:/app/settings.js # optional (for saving config file)
+```
 
 
 ## Usage
