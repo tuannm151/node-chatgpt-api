@@ -186,5 +186,5 @@ server.listen({ port: settings.port || 3000, host: "0.0.0.0" }, (error) => {
         db.close();
         process.exit(1);
     }
-})
+});
 
