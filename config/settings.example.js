@@ -32,4 +32,5 @@ export default {
     // The auth key to use for request header Authentication (optional). Set as undefined to disable authentication. 
     authKey: 'secret',
     notificationURL: 'https://example.com/notify',
+    notiAuthKey: 'secret',
 }
