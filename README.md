@@ -86,14 +86,14 @@ Alternatively, deploy using docker compose
 version: "3"
 services:
   chatgpt-server:
-    image: mtuan/chatgpt-server:latest
+    build: .
     container_name: chatgpt-server
     restart: always
     ports:
       - "3000:3000" # api endpoint port
       - "8045:8045" # optional (novnc port for solving captcha manually)
     volumes:
-      - '/<path>/settings.js:/app/settings.js'
+      - /<path>/settings.js:/app/settings.js # optional (for saving config file)
 ```
 
 
