@@ -7,9 +7,9 @@ WORKDIR /app
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
 # install chrome and dependencies to run vnc
-RUN apk upgrade --no-cache && \
+RUN apk update --no-cache && apk upgrade --no-cache && \
     apk add --no-cache \
-    xvfb xvfb-run x11vnc novnc git bash supervisor fluxbox && \
+    xvfb xvfb-run x11vnc novnc git bash supervisor fluxbox sqlite && \
     apk add --no-cache \
       chromium \
       harfbuzz \

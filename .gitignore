@@ -201,6 +201,6 @@ dist
 .pnp.*
 
 # node-chatgpt-api
-settings.js
+/config/settings.js
 
-db.sqlite3*
+/config/db.sqlite3*

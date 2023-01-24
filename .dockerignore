@@ -1,1 +1,3 @@
-settings.js
+/config/settings.js
+/config/db.sqlite3*
+/node_modules
