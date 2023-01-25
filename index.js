@@ -6,6 +6,7 @@ import { pathToFileURL } from 'url'
 import cors from '@fastify/cors';
 import ConnectDB from './db.js';
 import axios from 'axios';
+import { resolve } from 'path';
 
 const arg = process.argv.find((arg) => arg.startsWith('--settings'));
 let path;
@@ -29,62 +30,73 @@ if (fs.existsSync(path)) {
     process.exit(1);
 }
 
+const delay = (milis = 1000) => {
+    return new Promise(resolve => setTimeout(resolve, milis));
+}
+
 const db = new ConnectDB();
 
 const accounts = [];
 const conversationsMap = {};
+const accountsOnCooldown = new Set();
 
 for (let i = 0; i < settings.accounts.length; i++) {
     const account = settings.accounts[i];
-    const api = new ChatGPTAPIBrowser({
-        ...account,
-        nopechaKey: account.nopechaKey || settings.nopechaKey || undefined,
-        captchaToken: account.twoCaptchaKey || settings.twoCaptchaKey || undefined,
-        // For backwards compatibility
-        proxyServer: account.proxyServer || account.proxy || undefined,
-    });
+    try {
+        const api = new ChatGPTAPIBrowser({
+            ...account,
+            nopechaKey: account.nopechaKey || settings.nopechaKey || undefined,
+            captchaToken: account.twoCaptchaKey || settings.twoCaptchaKey || undefined,
+            // For backwards compatibility
+            proxyServer: account.proxyServer || account.proxy || undefined,
+        });
+        api.account_id = account.email;
 
-    api.account_id = account.email;
+        api.initSession().then(() => {
+            console.log(`Session initialized for account ${i}.`);
+            accounts.push(api);
+        });
 
-    api.initSession().then(() => {
-        console.log(`Session initialized for account ${i}.`);
-        accounts.push(api);
-    });
+        // call `api.refreshSession()` every hour to refresh the session
+        setInterval(() => {
+            api.refreshSession().then(() => {
+                console.log(`Session refreshed for account ${i}.`);
+            }).catch((err) => {
+                err.message = `Session refresh failed for account ${i}.`;
+                throw err;
+            });
+        }, 60 * 60 * 1000);
 
-    // call `api.refreshSession()` every hour to refresh the session
-    const notiURL = settings?.notificationURL;
-    const notiRequest = axios.create({
-        baseURL: notiURL,
-        headers: {
-            'xva-access-token': settings.notiAuthKey || ""
+        // call `api.resetSession()` every 24 hours to reset the session
+        setInterval(() => {
+            api.resetSession().then(() => {
+                console.log(`Session reset for account ${i}.`);
+            }).catch((err) => {
+                err.message = `Session reset failed for account ${i}.`;
+                throw err;
+            });
+        }, 24 * 60 * 60 * 1000);
+
+    } catch (err) {
+        const notiURL = settings?.notificationURL;
+
+        if (!notiURL) {
+            throw err;
         }
-    });
-    setInterval(() => {
-        api.refreshSession().then(() => {
-            console.log(`Session refreshed for account ${i}.`);
-        }).catch((err) => {
-            notiURL && notiRequest.post({
-                "type": "error",
-                "message": `Session refresh failed for account ${i}.`
-            });
-            // throw err so that the process exits
-            throw err;
-        });
-    }, 60 * 60 * 1000);
+        const errMessage = err.message.toLowerCase();
 
-    // call `api.resetSession()` every 24 hours to reset the session
-    setInterval(() => {
-        api.resetSession().then(() => {
-            console.log(`Session reset for account ${i}.`);
-        }).catch((err) => {
-            notiURL && axios.post({
-                "type": "error",
-                "message": `Session reset failed for account ${i}.`
+        if (errMessage.includes('session')) {
+            axios.post(notiURL, {
+                type: 'error',
+                message: err.message,
+            }, {
+                headers: {
+                    'xva-access-token': settings.notiAuthKey || ""
+                }
             });
-            throw err;
-        });
-    }, 24 * 60 * 60 * 1000);
-    // create instance for post notification
+        };
+        throw err;
+    }
 };
 
 let currentAccountIndex = 0;
@@ -95,6 +107,7 @@ const server = fastify();
 server.register(cors, {
     origin: settings.corsOrigin || '*',
 });
+
 
 server.post('/conversation', async (request, reply) => {
     // check for headers containing the API key
@@ -110,61 +123,109 @@ server.post('/conversation', async (request, reply) => {
 
     let conversationId = undefined;
     let messageId = undefined;
-
-    // search for conversationId and messageId using replyMsgId
-    if (request.body.replyMsgId) {
-        const row = db.getMessageByReplyMsgId(request.body.replyMsgId);
-        if (row) {
-            conversationId = row.conversationId;
-            messageId = row.messageId;
-        }
-    }
-
-    // Conversation IDs are tied to accounts, so we need to make sure that the same account is used for the same conversation.
-    if (conversationId) {
-        // get current account if already in the map
-        if (conversationsMap[conversationId]) {
-            currentAccountIndex = conversationsMap[conversationId];
-        } else {
-            const row = db.getAccountIdByConversationId(conversationId);
-            if (row) {
-                currentAccountIndex = accounts.findIndex((account) => account.account_id === row.accountId);
-                // set next account to create new conversation if not found available account
-                if (currentAccountIndex === -1) {
-                    currentAccountIndex = (currentAccountIndex + 1) % accounts.length;
-                    conversationId = undefined;
-                    messageId = undefined;
-                }
-            }
-        }
-    } else {
-        currentAccountIndex = (currentAccountIndex + 1) % accounts.length;
-    }
-
     let result;
     let error;
+    let account;
     try {
-        result = await accounts[currentAccountIndex].sendMessage(request.body.message, {
+        // search for conversationId and messageId using replyMsgId
+        if (request.body.replyMsgId) {
+            const row = db.getMessageByReplyMsgId(request.body.replyMsgId);
+            if (row) {
+                conversationId = row.conversationId;
+                messageId = row.messageId;
+            }
+        }
+
+        // Conversation IDs are tied to accounts, so we need to make sure that the same account is used for the same conversation.
+        if (conversationId) {
+            // get current account if already in the map
+            if (conversationsMap[conversationId]) {
+                currentAccountIndex = conversationsMap[conversationId];
+            } else {
+                const row = db.getAccountIdByConversationId(conversationId);
+                if (row) {
+                    currentAccountIndex = accounts.findIndex((account) => account.account_id === row.accountId);
+
+                    if (currentAccountIndex === -1) {
+                        // set next account to create new conversation if not found available account
+                        account = await getAPIAccount();
+                        conversationId = undefined;
+                        messageId = undefined;
+                    } else {
+                        account = await getAPIAccountByIndex(currentAccountIndex);
+                    }
+                }
+            }
+        } else {
+            account = await getAPIAccount();
+        }
+
+        accountsOnCooldown.add(account.account_id);
+        result = await account.sendMessage(request.body.message, {
             conversationId,
             parentMessageId: messageId,
         });
         // save if new conversationId 
         if (!conversationsMap[result.conversationId]) {
             conversationsMap[result.conversationId] = currentAccountIndex;
-            db.insertConversation(result.conversationId, accounts[currentAccountIndex].account_id);
+            db.insertConversation(result.conversationId, account.account_id);
         }
         result.response = result.response.trim();
     } catch (e) {
         error = e;
     }
 
+    if (account) {
+        accountsOnCooldown.delete(account.account_id);
+    }
+
     if (result !== undefined) {
         reply.send(result);
     } else {
         console.error(error);
-        reply.code(503).send({ error: 'There was an error communicating with ChatGPT.' });
+        reply.code(503).send({ error: error?.message || 'There was an error communicating with ChatGPT.' });
     }
 });
+
+async function getAPIAccount() {
+    const MAX_RETRIES = settings.apiTimeout || 60;
+    let retries = 0;
+
+    while (true) {
+        if (retries >= MAX_RETRIES) {
+            throw new Error(`All accounts are on cooldown. Try again later.`);
+        }
+        const account = accounts[currentAccountIndex];
+        if (!accountsOnCooldown.has(account.account_id)) {
+            return account;
+        }
+        currentAccountIndex = (currentAccountIndex + 1) % accounts.length;
+        retries++;
+        if (accountsOnCooldown.size >= accounts.length) {
+            await delay(1000);
+        }
+
+    }
+}
+
+async function getAPIAccountByIndex(index) {
+    const MAX_RETRIES = settings.accountTimeout || 60;
+    let retries = 0;
+    const { account_id } = accounts[index];
+    while (true) {
+        if (retries >= MAX_RETRIES) {
+            throw new Error(`Account ${account_id} is on cooldown. Try again later.`);
+        }
+
+        if (!accountsOnCooldown.has(account_id)) {
+            return accounts[index];
+        }
+
+        retries++;
+
+        await delay(1000);
+    }
+}
 
 server.post('/message/register', async (request, reply) => {
     try {
