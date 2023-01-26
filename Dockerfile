@@ -27,8 +27,8 @@ RUN ln -s /usr/share/novnc/vnc_lite.html /usr/share/novnc/index.html
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     DISPLAY=:0.0 \
-    DISPLAY_WIDTH=1280 \
-    DISPLAY_HEIGHT=1024
+    DISPLAY_WIDTH=1024 \
+    DISPLAY_HEIGHT=768
 
 COPY package.json /app/ 
 

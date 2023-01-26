@@ -61,9 +61,8 @@ for (let i = 0; i < settings.accounts.length; i++) {
         setInterval(() => {
             api.refreshSession().then(() => {
                 console.log(`Session refreshed for account ${i}.`);
-            }).catch((err) => {
-                err.message = `Session refresh failed for account ${i}.`;
-                throw err;
+            }).catch(() => {
+                throw new Error(`Session refresh failed for account ${i}.`)
             });
         }, 60 * 60 * 1000);
 
@@ -71,21 +70,20 @@ for (let i = 0; i < settings.accounts.length; i++) {
         setInterval(() => {
             api.resetSession().then(() => {
                 console.log(`Session reset for account ${i}.`);
-            }).catch((err) => {
-                err.message = `Session reset failed for account ${i}.`;
-                throw err;
+            }).catch(() => {
+                throw new Error(`Session reset failed for account ${i}.`)
             });
         }, 24 * 60 * 60 * 1000);
 
     } catch (err) {
-        const notiURL = settings?.notificationURL;
+        const notiURL = settings?.notiURL;
 
         if (!notiURL) {
             throw err;
         }
-        const errMessage = err.message.toLowerCase();
 
-        if (errMessage.includes('session')) {
+        const errMsg = err.message.toLowerCase();
+        if (errMsg.includes('session')) {
             axios.post(notiURL, {
                 type: 'error',
                 message: err.message,
@@ -94,7 +92,7 @@ for (let i = 0; i < settings.accounts.length; i++) {
                     'xva-access-token': settings.notiAuthKey || ""
                 }
             });
-        };
+        }
         throw err;
     }
 };
@@ -241,10 +239,11 @@ server.post('/message/register', async (request, reply) => {
     }
 });
 
-server.listen({ port: settings.port || 3000, host: "0.0.0.0" }, (error) => {
+server.listen({ port: settings.port || 3000, host: "0.0.0.0" }, async (error) => {
     if (error) {
-        console.error(error);
         db.close();
+        console.error(error);
+        await delay(1000);
         process.exit(1);
     }
 });
