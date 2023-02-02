@@ -53,16 +53,17 @@ for (let i = 0; i < settings.accounts.length; i++) {
         api.account_id = account.email;
 
         api.initSession().then(() => {
-            console.log(`Session initialized for account ${i}.`);
+            console.log(`Session initialized for account ${account.email}.`);
             accounts.push(api);
         });
 
         // call `api.refreshSession()` every hour to refresh the session
         setInterval(() => {
             api.refreshSession().then(() => {
-                console.log(`Session refreshed for account ${i}.`);
-            }).catch(() => {
-                throw new Error(`Session refresh failed for account ${i}.`)
+                console.log(`Session refreshed for account ${account.email}.`);
+            }).catch((err) => {
+                err.message = `Error refreshing session for account ${account.email}`;
+                err.sendNoti = true;
             });
         }, 60 * 60 * 1000);
 
@@ -70,8 +71,10 @@ for (let i = 0; i < settings.accounts.length; i++) {
         setInterval(() => {
             api.resetSession().then(() => {
                 console.log(`Session reset for account ${i}.`);
-            }).catch(() => {
-                throw new Error(`Session reset failed for account ${i}.`)
+            }).catch((err) => {
+                err.message = `Error resetting session for account ${account.email}`;
+                err.sendNoti = true;
+
             });
         }, 24 * 60 * 60 * 1000);
 
@@ -82,8 +85,8 @@ for (let i = 0; i < settings.accounts.length; i++) {
             throw err;
         }
 
-        const errMsg = err.message.toLowerCase();
-        if (errMsg.includes('session')) {
+        if (err.sendNoti) {
+            console.log(`Sending notification ...`)
             axios.post(notiURL, {
                 type: 'error',
                 message: err.message,
@@ -139,6 +142,7 @@ server.post('/conversation', async (request, reply) => {
             // get current account if already in the map
             if (conversationsMap[conversationId]) {
                 currentAccountIndex = conversationsMap[conversationId];
+                account = await getAPIAccountByIndex(currentAccountIndex);
             } else {
                 const row = db.getAccountIdByConversationId(conversationId);
                 if (row) {
