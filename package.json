@@ -1,15 +1,17 @@
 {
   "name": "@waylaidwanderer/chatgpt-api",
-  "version": "0.2.11",
-  "description": "An API layer for ChatGPT, powered by @transitive-bullshit's chatgpt-api (chatgpt on npm).",
+  "version": "1.5.0",
+  "description": "A ChatGPT implementation using the official ChatGPT model via OpenAI's API.",
   "main": "index.js",
   "bin": {
-    "chatgpt-api": "index.js"
+    "chatgpt-api": "bin/server.js",
+    "chatgpt-cli": "bin/cli.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start-hl": "xvfb-run --server-args=\"-screen 0 1280x800x24 -ac -nolisten tcp -dpi 96 +extension RANDR\" node index.js",
-    "start": "node index.js"
+    "start": "node bin/server.js",
+    "server": "node bin/server.js",
+    "cli": "node bin/cli.js"
   },
   "author": "waylaidwanderer",
   "license": "MIT",
@@ -25,13 +27,22 @@
     "openai-api",
     "gpt",
     "gpt3",
+    "gpt-3",
     "api",
     "api-wrapper"
   ],
   "dependencies": {
-    "chatgpt": "^3.5.1",
+    "@fastify/cors": "^8.2.0",
+    "@keyv/sqlite": "^3.6.4",
+    "boxen": "^7.0.1",
+    "clipboardy": "^3.0.0",
     "dotenv": "^16.0.3",
     "fastify": "^4.11.0",
-    "puppeteer": "^19.4.1"
+    "gpt-3-encoder": "^1.1.4",
+    "inquirer": "^9.1.4",
+    "keyv": "^4.5.2",
+    "keyv-file": "^0.2.0",
+    "node-fetch": "^3.3.0",
+    "ora": "^6.1.2"
   }
 }
