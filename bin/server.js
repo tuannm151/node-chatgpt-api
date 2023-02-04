@@ -77,15 +77,22 @@ server.post('/conversation', async (request, reply) => {
         let parentMessageId;
         let conversationId;
 
-        let msgReplyId = request.body.msgReplyId ? request.body.msgReplyId.toString() : undefined;
+        let replyMsgId = request.body.replyMsgId ? request.body.replyMsgId.toString() : undefined;
         parentMessageId = request.body.parentMessageId ? request.body.parentMessageId.toString() : undefined;
         conversationId = request.body.conversationId ? request.body.conversationId.toString() : undefined;
 
-        if (msgReplyId) {
-            const msgReplyData = await messageCache.get(msgReplyId);
+        if (replyMsgId) {
+            const msgReplyData = await messageCache.get(replyMsgId);
             if (msgReplyData) {
                 parentMessageId = msgReplyData.messageId;
                 conversationId = msgReplyData.conversationId;
+            }
+            if (settings.serverDebug) {
+                console.log('message found', {
+                    messageId: parentMessageId,
+                    conversationId,
+                    replyMsgId,
+                });
             }
         }
 
@@ -120,6 +127,14 @@ server.post('/message/register', async (request, reply) => {
             messageId: request.body.messageId,
             conversationId: request.body.conversationId,
         });
+        if (settings.serverDebug) {
+            console.log('message registered', {
+                messageId: request.body.messageId,
+                conversationId: request.body.conversationId,
+                replyMsgId: request.body.replyMsgId,
+            });
+        }
+        reply.code(201).send({ success: true });
     } catch {
         reply.code(503).send({ error: 'There was an error executing query to DB' });
     }
