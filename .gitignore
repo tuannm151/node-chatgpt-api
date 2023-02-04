@@ -205,3 +205,4 @@ settings.js
 test.js
 *.cast
 cache.json
+/config/*.sqlite

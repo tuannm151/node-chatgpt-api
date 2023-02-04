@@ -78,15 +78,14 @@ server.post('/conversation', async (request, reply) => {
         let conversationId;
 
         let msgReplyId = request.body.msgReplyId ? request.body.msgReplyId.toString() : undefined;
+        parentMessageId = request.body.parentMessageId ? request.body.parentMessageId.toString() : undefined;
+        conversationId = request.body.conversationId ? request.body.conversationId.toString() : undefined;
 
         if (msgReplyId) {
             const msgReplyData = await messageCache.get(msgReplyId);
             if (msgReplyData) {
                 parentMessageId = msgReplyData.messageId;
                 conversationId = msgReplyData.conversationId;
-            } else {
-                parentMessageId = request.body.parentMessageId ? request.body.parentMessageId.toString() : undefined;
-                conversationId = request.body.conversationId ? request.body.conversationId.toString() : undefined;
             }
         }
 
