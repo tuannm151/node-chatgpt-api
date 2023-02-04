@@ -10,8 +10,8 @@ RUN npm install
 
 COPY . /app
 
-CMD ["npm", "server"]
-EXPOSE 8045
+CMD ["node", "bin/server.js"]
+
 EXPOSE 3000
 
 
