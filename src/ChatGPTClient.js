@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import Keyv from 'keyv';
 import { encode as gptEncode } from 'gpt-3-encoder';
 
-const CHATGPT_MODEL = 'text-chat-davinci-002-20230126';
+const CHATGPT_MODEL = 'text-chat-davinci-002-20221122';
 
 export default class ChatGPTClient {
     constructor(
@@ -19,11 +19,27 @@ export default class ChatGPTClient {
             ...modelOptions,
             // set some good defaults (check for undefined in some cases because they may be 0)
             model: modelOptions.model || CHATGPT_MODEL,
-            temperature: typeof modelOptions.temperature === 'undefined' ? 1 : modelOptions.temperature,
-            top_p: typeof modelOptions.top_p === 'undefined' ? 0.7 : modelOptions.top_p,
+            temperature: typeof modelOptions.temperature === 'undefined' ? 0.9 : modelOptions.temperature,
+            top_p: typeof modelOptions.top_p === 'undefined' ? 1 : modelOptions.top_p,
             presence_penalty: typeof modelOptions.presence_penalty === 'undefined' ? 0.6 : modelOptions.presence_penalty,
-            stop: modelOptions.stop || ['<|im_end|>', '<|im_sep|>'],
+            stop: modelOptions.stop,
         };
+
+        if (this.modelOptions.model.startsWith('text-chat')) {
+            this.endToken = '<|im_end|>';
+            this.separatorToken = '<|im_sep|>';
+        } else {
+            this.endToken = '<|endoftext|>';
+            this.separatorToken = this.endToken;
+        }
+
+        if (!this.modelOptions.stop) {
+            if (this.modelOptions.model.startsWith('text-chat')) {
+                this.modelOptions.stop = [this.endToken, this.separatorToken];
+            } else {
+                this.modelOptions.stop = [this.endToken];
+            }
+        }
 
         cacheOptions.namespace = cacheOptions.namespace || 'chatgpt';
         this.conversationsCache = new Keyv(cacheOptions);
@@ -67,6 +83,7 @@ export default class ChatGPTClient {
         if (!conversation) {
             conversation = {
                 messages: [],
+                createdAt: Date.now(),
             };
         }
 
@@ -123,8 +140,8 @@ export default class ChatGPTClient {
         if (this.options.promptPrefix) {
             promptPrefix = this.options.promptPrefix;
             // If the prompt prefix doesn't end with the separator token, add it.
-            if (!promptPrefix.endsWith('<|im_sep|>\n\n')) {
-                promptPrefix = `${promptPrefix.trim()}<|im_sep|>\n\n`;
+            if (!promptPrefix.endsWith(`${this.separatorToken}\n\n`)) {
+                promptPrefix = `${promptPrefix.trim()}${this.separatorToken}\n\n`;
             }
         } else {
             const currentDateString = new Date().toLocaleDateString(
@@ -132,7 +149,7 @@ export default class ChatGPTClient {
                 { year: 'numeric', month: 'long', day: 'numeric' },
             );
 
-            promptPrefix = `Respond conversationally.\nCurrent date: ${currentDateString}<|im_end|>\n\n`
+            promptPrefix = `You are ChatGPT, a large language model trained by OpenAI.\nCurrent date: ${currentDateString}${this.endToken}\n\n`
         }
 
         const userLabel = this.options.userLabel || 'User';
@@ -148,7 +165,7 @@ export default class ChatGPTClient {
         while (currentTokenCount < maxTokenCount && orderedMessages.length > 0) {
             const message = orderedMessages.pop();
             const roleLabel = message.role === 'User' ? userLabel : chatGptLabel;
-            const messageString = `${roleLabel}:\n${message.message}<|im_sep|>\n`;
+            const messageString = `${roleLabel}:\n${message.message}${this.separatorToken}\n`;
             const newPromptBody = `${messageString}${promptBody}`;
 
             // The reason I don't simply get the token count of the messageString and add it to currentTokenCount is because
