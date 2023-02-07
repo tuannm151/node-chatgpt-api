@@ -67,10 +67,6 @@ server.register(cors, {
     origin: settings.corsOrigin || '*',
 });
 
-await server.register(cors, {
-    origin: '*',
-});
-
 server.post('/conversation', async (request, reply) => {
     if (settings.apiAuthKey && request.headers['authorization'] !== settings.apiAuthKey) {
         reply.code(401).send({ error: 'Unauthorized.' });
