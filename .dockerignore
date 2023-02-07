@@ -1,2 +1,4 @@
+/config/settings.js
+/config/*.sqlite
 /node_modules
 /config/*.sqlite

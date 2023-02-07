@@ -206,3 +206,6 @@ test.js
 *.cast
 cache.json
 /config/*.sqlite
+/config/settings.js
+
+/config/*.sqlite
