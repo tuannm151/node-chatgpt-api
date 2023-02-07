@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import crypto from 'crypto';
 import Keyv from 'keyv';
 import { encode as gptEncode } from 'gpt-3-encoder';
+import { fetchEventSource } from '@fortaine/fetch-event-source';
 
 const CHATGPT_MODEL = 'text-chat-davinci-002-20221122';
 
@@ -42,28 +43,78 @@ export default class ChatGPTClient {
             } else {
                 this.modelOptions.stop = [this.endToken];
             }
-            this.modelOptions.stop.push(`\n\n${this.userLabel}:`);
-            this.modelOptions.stop.push(`\n\nInstructions:`);
-            // I chose not to do one for `chatGptLabel` because I've never seen it happen, plus there's a max of 4 stops
+            this.modelOptions.stop.push(`\n${this.userLabel}:`);
+            // I chose not to do one for `chatGptLabel` because I've never seen it happen
         }
 
         cacheOptions.namespace = cacheOptions.namespace || 'chatgpt';
         this.conversationsCache = new Keyv(cacheOptions);
     }
 
-    async getCompletion(prompt) {
-        this.modelOptions.prompt = prompt;
-        if (this.options.debug) {
-            console.debug(this.modelOptions);
+    async getCompletion(prompt, onProgress) {
+        const modelOptions = { ...this.modelOptions };
+        if (typeof onProgress === 'function') {
+            modelOptions.stream = true;
         }
-        const response = await fetch('https://api.openai.com/v1/completions', {
+        modelOptions.prompt = prompt;
+        const debug = this.options.debug;
+        if (debug) {
+            console.debug(modelOptions);
+        }
+        const url = 'https://api.openai.com/v1/completions';
+        const opts = {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${this.apiKey}`,
             },
-            body: JSON.stringify(this.modelOptions),
-        });
+            body: JSON.stringify(modelOptions),
+        };
+        if (modelOptions.stream) {
+            return new Promise(async (resolve, reject) => {
+                const controller = new AbortController();
+                try {
+                    await fetchEventSource(url, {
+                        ...opts,
+                        signal: controller.signal,
+                        onopen(response) {
+                            if (response.status === 200) {
+                                return;
+                            }
+                            if (debug) {
+                                console.debug(response);
+                            }
+                            throw new Error(`Failed to send message. HTTP ${response.status} - ${response.statusText}`);
+                        },
+                        onclose() {
+                            throw new Error(`Failed to send message. Server closed the connection unexpectedly.`);
+                        },
+                        onerror(err) {
+                            if (debug) {
+                                console.debug(err);
+                            }
+                            // rethrow to stop the operation
+                            throw err;
+                        },
+                        onmessage(message) {
+                            if (debug) {
+                                console.debug(message);
+                            }
+                            if (message.data === '[DONE]') {
+                                onProgress('[DONE]');
+                                controller.abort();
+                                resolve();
+                                return;
+                            }
+                            onProgress(JSON.parse(message.data));
+                        },
+                    });
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+        const response = await fetch(url, opts);
         if (response.status !== 200) {
             const body = await response.text();
             const error = new Error(`Failed to send message. HTTP ${response.status} - ${body}`);
@@ -103,13 +154,34 @@ export default class ChatGPTClient {
         conversation.messages.push(userMessage);
 
         const prompt = await this.buildPrompt(conversation.messages, userMessage.id);
-        const result = await this.getCompletion(prompt);
+
+        let reply = '';
+        if (typeof opts.onProgress === 'function') {
+            await this.getCompletion(prompt, (message) => {
+                if (message === '[DONE]') {
+                    return;
+                }
+                const token = message.choices[0].text;
+                if (this.options.debug) {
+                    console.debug(token);
+                }
+                opts.onProgress(token);
+                reply += token;
+            });
+        } else {
+            const result = await this.getCompletion(prompt, null);
+            if (this.options.debug) {
+                console.debug(JSON.stringify(result));
+            }
+            reply = result.choices[0].text;
+        }
+
+        // avoids some rendering issues when using the CLI app
         if (this.options.debug) {
-            console.debug(JSON.stringify(result));
             console.debug();
         }
 
-        const reply = result.choices[0].text.trim();
+        reply = reply.trim();
 
         const replyMessage = {
             id: crypto.randomUUID(),
@@ -129,19 +201,7 @@ export default class ChatGPTClient {
     }
 
     async buildPrompt(messages, parentMessageId) {
-        // Iterate through messages, building an array based on the parentMessageId.
-        // Each message has an id and a parentMessageId. The parentMessageId is the id of the message that this message is a reply to.
-        // The array will contain the messages in the order they should be displayed, starting with the root message.
-        const orderedMessages = [];
-        let currentMessageId = parentMessageId;
-        while (currentMessageId) {
-            const message = messages.find((m) => m.id === currentMessageId);
-            if (!message) {
-                break;
-            }
-            orderedMessages.unshift(message);
-            currentMessageId = message.parentMessageId;
-        }
+        const orderedMessages = this.constructor.getMessagesForConversation(messages, parentMessageId);
 
         let promptPrefix;
         if (this.options.promptPrefix) {
@@ -150,14 +210,14 @@ export default class ChatGPTClient {
             if (!promptPrefix.endsWith(`${this.separatorToken}\n\n`)) {
                 promptPrefix = `${promptPrefix.trim()}${this.separatorToken}\n\n`;
             }
-            promptPrefix = `\nInstructions:\n${promptPrefix}`;
+            promptPrefix = `\n${this.separatorToken}Instructions:\n${promptPrefix}`;
         } else {
             const currentDateString = new Date().toLocaleDateString(
                 'en-us',
                 { year: 'numeric', month: 'long', day: 'numeric' },
             );
 
-            promptPrefix = `\nInstructions:\nYou are ChatGPT, a large language model trained by OpenAI.\nCurrent date: ${currentDateString}${this.separatorToken}\n\n`
+            promptPrefix = `\n${this.separatorToken}Instructions:\nYou are ChatGPT, a large language model trained by OpenAI.\nCurrent date: ${currentDateString}${this.separatorToken}\n\n`
         }
 
         const promptSuffix = `${this.chatGptLabel}:\n`; // Prompt ChatGPT to respond.
@@ -213,5 +273,27 @@ export default class ChatGPTClient {
             text = text.replace(/<\|im_sep\|>/g, '<|endoftext|>');
         }
         return gptEncode(text).length;
+    }
+
+    /**
+     * Iterate through messages, building an array based on the parentMessageId.
+     * Each message has an id and a parentMessageId. The parentMessageId is the id of the message that this message is a reply to.
+     * @param messages
+     * @param parentMessageId
+     * @returns {*[]} An array containing the messages in the order they should be displayed, starting with the root message.
+     */
+    static getMessagesForConversation(messages, parentMessageId) {
+        const orderedMessages = [];
+        let currentMessageId = parentMessageId;
+        while (currentMessageId) {
+            const message = messages.find((m) => m.id === currentMessageId);
+            if (!message) {
+                break;
+            }
+            orderedMessages.unshift(message);
+            currentMessageId = message.parentMessageId;
+        }
+
+        return orderedMessages;
     }
 }

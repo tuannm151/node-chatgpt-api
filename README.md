@@ -27,10 +27,22 @@ The previous version of this library that used [transitive-bullshit/chatgpt-api]
 
 By itself, the model does not have any conversational support, so this library uses a cache to store conversations and pass them to the model as context. This allows you to have persistent conversations with ChatGPT in a nearly identical way to the official website.
 
+# Table of Contents
+   * [Features](#features)
+   * [Getting Started](#getting-started)
+      * [Prerequisites](#prerequisites)
+      * [Usage](#usage)
+         * [Module](#module)
+         * [API Server](#api-server)
+         * [CLI](#cli)
+   * [Caveats](#caveats)
+   * [Contributing](#contributing)
+   * [License](#license)
+
 ## Features
 
 - Uses the official ChatGPT raw model, `text-chat-davinci-002-20221122`.
-- Includes an API server you can run to use ChatGPT in non-Node.js applications.
+- Includes an API server (with Docker support) you can run to use ChatGPT in non-Node.js applications.
 - Includes a `ChatGPTClient` class that you can use in your own Node.js applications.
 - Includes a CLI interface where you can chat with ChatGPT.
 - Replicates chat threads from the official ChatGPT website (with conversation IDs and message IDs), with persistent conversations using [Keyv](https://www.npmjs.com/package/keyv).
@@ -46,6 +58,7 @@ By itself, the model does not have any conversational support, so this library u
 
 - Node.js
 - npm
+- Docker (optional, for API server)
 - [OpenAI API key](https://platform.openai.com/account/api-keys)
 
 ## Usage
@@ -91,12 +104,23 @@ console.log(response); // { response: 'Hi! How can I help you today?', conversat
 const response2 = await chatGptClient.sendMessage('Write a poem about cats.', { conversationId: response.conversationId, parentMessageId: response.messageId });
 console.log(response2.response); // Cats are the best pets in the world.
 
-const response3 = await chatGptClient.sendMessage('Now write it in French.', { conversationId: response2.conversationId, parentMessageId: response2.messageId });
+const response3 = await chatGptClient.sendMessage('Now write it in French.', {
+  conversationId: response2.conversationId,
+  parentMessageId: response2.messageId,
+  // If you want streamed responses, you can set the `onProgress` callback to receive the response as it's generated.
+  // You will receive one token at a time, so you will need to concatenate them yourself.
+  onProgress: (token) => console.log(token),
+});
 console.log(response3.response); // Les chats sont les meilleurs animaux de compagnie du monde.
 ```
 
 ### API Server
 
+<<<<<<< HEAD
+=======
+<h4 id="api-server-setup">Setup</h4>
+
+>>>>>>> 65a3294cc5fb5759d7ea52d2fd9c62fc5392ce40
 You can install the package using
 
 ```bash
@@ -104,13 +128,13 @@ npm i -g @waylaidwanderer/chatgpt-api
 ```
 
 then run it using
-`chatgpt-api`.  
+`chatgpt-api`.
 This takes an optional `--settings=<path_to_settings.js>` parameter, or looks for `settings.js` in the current directory if not set, with the following contents:
 
 ```JS
 module.exports = {
   // Your OpenAI API key
-  openaiApiKey: '',
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
   chatGptClient: {
     // (Optional) Parameters as described in https://platform.openai.com/docs/api-reference/completions
     modelOptions: {
@@ -130,21 +154,38 @@ module.exports = {
   // Options for the Keyv cache, see https://www.npmjs.com/package/keyv
   // This is used for storing conversations, and supports additional drivers (conversations are stored in memory by default)
   cacheOptions: {},
-  // The port the server will run on (optional, defaults to 3000)
-  port: 3000,
+  // Options for the API server
+  apiOptions: {
+    port: process.env.API_PORT || 3000,
+    host: process.env.API_HOST || 'localhost',
+    // (Optional) Set to true to enable `console.debug()` logging
+    debug: false,
+  },
   // If set, ChatGPTClient will use `keyv-file` to store conversations to this JSON file instead of in memory.
-  // `cacheOptions.store` will override this if set
-  storageFilePath: './cache.json',
+  // However, `cacheOptions.store` will override this if set
+  storageFilePath: process.env.STORAGE_FILE_PATH || './cache.json',
 };
 ```
 
+<<<<<<< HEAD
 Alternatively, you can install and run the package locally:
 
 1. Clone this repository
 2. Install dependencies with `npm install`
 3. Rename `settings.example.js` to `settings.js` in the root directory and change the settings where required.
 4. Start the server using `npm start` or `npm run server`
+=======
+Alternatively, you can install and run the package directly.
+>>>>>>> 65a3294cc5fb5759d7ea52d2fd9c62fc5392ce40
 
+1. Clone this repository: `git clone https://github.com/waylaidwanderer/node-chatgpt-api`
+2. Install dependencies with `npm install` (if not using Docker)
+3. Rename `settings.example.js` to `settings.js` in the root directory and change the settings where required.
+4. Start the server:
+    - using `npm start` or `npm run server` (if not using Docker)
+    - using `docker-compose up` (requires Docker)
+
+#### Usage
 To start a conversation with ChatGPT, send a POST request to the server's `/conversation` endpoint with a JSON body in the following format:
 
 ```JSON
@@ -156,8 +197,13 @@ To start a conversation with ChatGPT, send a POST request to the server's `/conv
 ```
 
 The server will return a JSON object containing ChatGPT's response:
+<<<<<<< HEAD
 
 ```JSON
+=======
+```JS
+// HTTP/1.1 200 OK
+>>>>>>> 65a3294cc5fb5759d7ea52d2fd9c62fc5392ce40
 {
     "response": "I'm doing well, thank you! How are you?",
     "conversationId": "your-conversation-id",
@@ -165,20 +211,82 @@ The server will return a JSON object containing ChatGPT's response:
 }
 ```
 
-If the request is unsuccessful, the server will return a JSON object with an error message and a status code of 503.
+If the request is unsuccessful, the server will return a JSON object with an error message.
 
+If the request object is missing a required property (e.g. `message`):
+```JS
+// HTTP/1.1 400 Bad Request
+{
+    "error": "The message parameter is required."
+}
+```
 If there was an error sending the message to ChatGPT:
+<<<<<<< HEAD
 
 ```JSON
+=======
+```JS
+// HTTP/1.1 503 Service Unavailable
+>>>>>>> 65a3294cc5fb5759d7ea52d2fd9c62fc5392ce40
 {
     "error": "There was an error communicating with ChatGPT."
 }
 ```
 
+<<<<<<< HEAD
 ### CLI
 
 Install the package using the same instructions as the API server.
+=======
+You can set `"stream": true` in the request body to receive a stream of tokens as they are generated.
+```JSON
+{
+    "message": "Write a poem about cats.",
+    "conversationId": "your-conversation-id (optional)",
+    "parentMessageId": "your-parent-message-id (optional)",
+    "stream": true
+}
+```
+>>>>>>> 65a3294cc5fb5759d7ea52d2fd9c62fc5392ce40
 
+See [demos/use-api-server-streaming.js](demos/use-api-server-streaming.js) for an example of how to receive the response as it's generated. You will receive one token at a time, so you will need to concatenate them yourself.
+
+Successful output:
+```JS
+{ data: '', event: '', id: '', retry: 3000 }
+{ data: 'Hello', event: '', id: '', retry: undefined }
+{ data: '!', event: '', id: '', retry: undefined }
+{ data: ' How', event: '', id: '', retry: undefined }
+{ data: ' can', event: '', id: '', retry: undefined }
+{ data: ' I', event: '', id: '', retry: undefined }
+{ data: ' help', event: '', id: '', retry: undefined }
+{ data: ' you', event: '', id: '', retry: undefined }
+{ data: ' today', event: '', id: '', retry: undefined }
+{ data: '?', event: '', id: '', retry: undefined }
+{ data: '[DONE]', event: '', id: '', retry: undefined }
+// Hello! How can I help you today?
+```
+
+Error output:
+```JS
+const message = {
+  data: '{"code":503,"error":"There was an error communicating with ChatGPT."}',
+  event: 'error',
+  id: '',
+  retry: undefined
+};
+
+if (message.event === 'error') {
+  console.error(JSON.parse(message.data).error); // There was an error communicating with ChatGPT.
+}
+```
+
+### CLI
+
+#### Setup
+Follow the same [setup instructions](#api-server-setup) for the API server, creating `settings.js`.
+
+#### Usage
 If installed globally:
 
 ```bash
@@ -194,8 +302,12 @@ npm run cli
 ChatGPT's responses are automatically copied to your clipboard, so you can paste them into other applications.
 
 ## Caveats
+<<<<<<< HEAD
 
 Since `text-chat-davinci-002-20221122` is ChatGPT's raw model, I had to do my best to replicate the way the official ChatGPT website uses it. After extensive testing and comparing responses, I believe that the model used by ChatGPT has some additional fine-tuning.  
+=======
+Since `text-chat-davinci-002-20221122` is ChatGPT's raw model, I had to do my best to replicate the way the official ChatGPT website uses it. After extensive testing and comparing responses, I believe that the model used by ChatGPT has some additional fine-tuning.
+>>>>>>> 65a3294cc5fb5759d7ea52d2fd9c62fc5392ce40
 This means my implementation or the raw model may not behave exactly the same in some ways:
 
 - Conversations are not tied to any user IDs, so if that's important to you, you should implement your own user ID system.
@@ -203,9 +315,14 @@ This means my implementation or the raw model may not behave exactly the same in
 - Conversations are limited to roughly the last 3000 tokens, so earlier messages may be forgotten during longer conversations.
   - This works in a similar way to ChatGPT, except I'm pretty sure they have some additional way of retrieving context from earlier messages when needed (which can probably be achieved with embeddings, but I consider that out-of-scope for now).
 - It is well known that, as part of the fine-tuning, ChatGPT had the following preamble:
+<<<<<<< HEAD
 
   > "You are ChatGPT, a large language model trained by OpenAI. You answer as concisely as possible for each response (e.g. don’t be verbose). It is very important that you answer as concisely as possible, so please remember this. If you are generating a list, do not have too many items. Keep the number of items short.  
   > Knowledge cutoff: 2021-09  
+=======
+  > "You are ChatGPT, a large language model trained by OpenAI. You answer as concisely as possible for each response (e.g. don’t be verbose). It is very important that you answer as concisely as possible, so please remember this. If you are generating a list, do not have too many items. Keep the number of items short.
+  > Knowledge cutoff: 2021-09
+>>>>>>> 65a3294cc5fb5759d7ea52d2fd9c62fc5392ce40
   > Current date: 2023-01-31"
 
   As OpenAI updates ChatGPT, this preamble may also change. The default prompt prefix in my implementation attempts to replicate a similar behavior to the current ChatGPT model.

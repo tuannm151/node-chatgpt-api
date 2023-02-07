@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import fastify from 'fastify';
+import cors from '@fastify/cors';
+import { FastifySSEPlugin } from "fastify-sse-v2";
 import fs from 'fs';
 import { pathToFileURL } from 'url'
 import ChatGPTClient from '../src/ChatGPTClient.js';
@@ -65,21 +67,46 @@ server.register(cors, {
     origin: settings.corsOrigin || '*',
 });
 
+await server.register(FastifySSEPlugin);
+await server.register(cors, {
+    origin: '*',
+});
+
 server.post('/conversation', async (request, reply) => {
     if (settings.apiAuthKey && request.headers['authorization'] !== settings.apiAuthKey) {
         reply.code(401).send({ error: 'Unauthorized.' });
         return;
     }
+    const body = request.body || {};
+
+    let onProgress;
+    if (body.stream === true) {
+        onProgress = (token) => {
+            if (settings.apiOptions?.debug) {
+                console.debug(token);
+            }
+            reply.sse({ id: '', data: token });
+        };
+    } else {
+        onProgress = null;
+    }
 
     let result;
     let error;
     try {
-        let parentMessageId;
-        let conversationId;
+        if (!body.message) {
+            const invalidError = new Error();
+            invalidError.data = {
+                code: 400,
+                message: 'The message parameter is required.',
+            };
+            // noinspection ExceptionCaughtLocallyJS
+            throw invalidError;
+        }
 
         let replyMsgId = request.body.replyMsgId ? request.body.replyMsgId.toString() : undefined;
-        parentMessageId = request.body.parentMessageId ? request.body.parentMessageId.toString() : undefined;
-        conversationId = request.body.conversationId ? request.body.conversationId.toString() : undefined;
+        let parentMessageId = request.body.parentMessageId ? request.body.parentMessageId.toString() : undefined;
+        let conversationId = request.body.conversationId ? request.body.conversationId.toString() : undefined;
 
         if (replyMsgId) {
             const msgReplyData = await messageCache.get(replyMsgId);
@@ -87,7 +114,7 @@ server.post('/conversation', async (request, reply) => {
                 parentMessageId = msgReplyData.messageId;
                 conversationId = msgReplyData.conversationId;
             }
-            if (settings.serverDebug) {
+            if (settings.apiOptions?.debug) {
                 console.log('message found', {
                     messageId: parentMessageId,
                     conversationId,
@@ -99,16 +126,41 @@ server.post('/conversation', async (request, reply) => {
         result = await chatGptClient.sendMessage(request.body.message, {
             conversationId,
             parentMessageId,
+            onProgress,
         });
     } catch (e) {
         error = e;
     }
 
     if (result !== undefined) {
-        reply.send(result);
+        if (body.stream === true) {
+            reply.sse({ id: '', data: '[DONE]' });
+        } else {
+            reply.send(result);
+        }
+        if (settings.apiOptions?.debug) {
+            console.debug(result);
+        }
     } else {
-        console.error(error);
-        reply.code(503).send({ error: 'There was an error communicating with ChatGPT.' });
+        const code = error?.data?.code || 503;
+        if (code === 503) {
+            console.error(error);
+        } else if (settings.apiOptions?.debug) {
+            console.debug(error);
+        }
+        const message = error?.data?.message || 'There was an error communicating with ChatGPT.';
+        if (body.stream === true) {
+            reply.sse({
+                id: '',
+                event: 'error',
+                data: JSON.stringify({
+                    code,
+                    error: message,
+                }),
+            });
+        } else {
+            reply.code(code).send({ error: message });
+        }
     }
 });
 
@@ -127,7 +179,7 @@ server.post('/message/register', async (request, reply) => {
             messageId: request.body.messageId,
             conversationId: request.body.conversationId,
         });
-        if (settings.serverDebug) {
+        if (settings.apiOptions?.debug) {
             console.log('message registered', {
                 messageId: request.body.messageId,
                 conversationId: request.body.conversationId,
@@ -141,7 +193,10 @@ server.post('/message/register', async (request, reply) => {
 });
 
 
-server.listen({ port: settings.port || 3000, host: '0.0.0.0' }, (error) => {
+server.listen({
+    port: settings.apiOptions?.port || settings.port || 3000,
+    host: settings.apiOptions?.host || '0.0.0.0'
+}, (error) => {
     if (error) {
         console.error(error);
         process.exit(1);
