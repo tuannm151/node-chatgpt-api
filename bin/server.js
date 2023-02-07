@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 import fastify from 'fastify';
 import cors from '@fastify/cors';
-import { FastifySSEPlugin } from "fastify-sse-v2";
 import fs from 'fs';
 import { pathToFileURL } from 'url'
 import ChatGPTClient from '../src/ChatGPTClient.js';
 import { KeyvFile } from 'keyv-file';
 import Keyv from 'keyv';
-import cors from '@fastify/cors'
+
 
 const arg = process.argv.find((arg) => arg.startsWith('--settings'));
 let path;
