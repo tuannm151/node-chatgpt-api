@@ -67,7 +67,6 @@ server.register(cors, {
     origin: settings.corsOrigin || '*',
 });
 
-await server.register(FastifySSEPlugin);
 await server.register(cors, {
     origin: '*',
 });
