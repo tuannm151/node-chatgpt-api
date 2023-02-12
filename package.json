@@ -1,6 +1,6 @@
 {
   "name": "@waylaidwanderer/chatgpt-api",
-  "version": "1.10.1",
+  "version": "1.15.1",
   "description": "A ChatGPT implementation using the official ChatGPT model via OpenAI's API.",
   "main": "index.js",
   "bin": {
@@ -21,20 +21,27 @@
     "url": "git+https://github.com/waylaidwanderer/node-chatgpt-api.git"
   },
   "keywords": [
+    "api",
+    "cli",
+    "bing",
+    "api-server",
+    "openai",
+    "api-rest",
+    "gpt",
+    "bing-api",
+    "bing-search",
+    "gpt-3",
+    "openai-api",
+    "gpt-4",
     "chatgpt",
     "chatgpt-api",
-    "openai",
-    "openai-api",
-    "gpt",
-    "gpt3",
-    "gpt-3",
-    "api",
-    "api-wrapper"
+    "bing-chat"
   ],
   "dependencies": {
     "@fastify/cors": "^8.2.0",
     "@keyv/sqlite": "^3.6.4",
     "@fortaine/fetch-event-source": "^3.0.6",
+    "@waylaidwanderer/fetch-event-source": "^3.0.1",
     "boxen": "^7.0.1",
     "clipboardy": "^3.0.0",
     "dotenv": "^16.0.3",
@@ -46,6 +53,7 @@
     "keyv": "^4.5.2",
     "keyv-file": "^0.2.0",
     "node-fetch": "^3.3.0",
-    "ora": "^6.1.2"
+    "ora": "^6.1.2",
+    "ws": "^8.12.0"
   }
 }

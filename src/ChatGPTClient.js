@@ -1,10 +1,10 @@
-import fetch from 'node-fetch';
+import './fetch-polyfill.js';
 import crypto from 'crypto';
 import Keyv from 'keyv';
 import { encode as gptEncode } from 'gpt-3-encoder';
-import { fetchEventSource } from '@fortaine/fetch-event-source';
+import { fetchEventSource } from '@waylaidwanderer/fetch-event-source';
 
-const CHATGPT_MODEL = 'text-chat-davinci-002-20221122';
+const CHATGPT_MODEL = 'text-chat-davinci-002-sh-alpha-aoruigiofdj83';
 
 export default class ChatGPTClient {
     constructor(
@@ -29,7 +29,9 @@ export default class ChatGPTClient {
         this.userLabel = this.options.userLabel || 'User';
         this.chatGptLabel = this.options.chatGptLabel || 'ChatGPT';
 
-        if (this.modelOptions.model.startsWith('text-chat')) {
+        const isChatGptModel = this.modelOptions.model.startsWith('text-chat') || this.modelOptions.model.startsWith('text-davinci-002-render');
+
+        if (isChatGptModel) {
             this.endToken = '<|im_end|>';
             this.separatorToken = '<|im_sep|>';
         } else {
@@ -38,7 +40,7 @@ export default class ChatGPTClient {
         }
 
         if (!this.modelOptions.stop) {
-            if (this.modelOptions.model.startsWith('text-chat')) {
+            if (isChatGptModel) {
                 this.modelOptions.stop = [this.endToken, this.separatorToken];
             } else {
                 this.modelOptions.stop = [this.endToken];
@@ -61,7 +63,7 @@ export default class ChatGPTClient {
         if (debug) {
             console.debug(modelOptions);
         }
-        const url = 'https://api.openai.com/v1/completions';
+        const url = this.options.reverseProxyUrl || 'https://api.openai.com/v1/completions';
         const opts = {
             method: 'POST',
             headers: {
@@ -74,20 +76,38 @@ export default class ChatGPTClient {
             return new Promise(async (resolve, reject) => {
                 const controller = new AbortController();
                 try {
+                    let done = false;
                     await fetchEventSource(url, {
                         ...opts,
                         signal: controller.signal,
-                        onopen(response) {
+                        async onopen(response) {
                             if (response.status === 200) {
                                 return;
                             }
                             if (debug) {
                                 console.debug(response);
                             }
-                            throw new Error(`Failed to send message. HTTP ${response.status} - ${response.statusText}`);
+                            let error;
+                            try {
+                                const body = await response.text();
+                                error = new Error(`Failed to send message. HTTP ${response.status} - ${body}`);
+                                error.status = response.status;
+                                error.json = JSON.parse(body);
+                            } catch {
+                                error = error || new Error(`Failed to send message. HTTP ${response.status}`);
+                            }
+                            throw error;
                         },
                         onclose() {
-                            throw new Error(`Failed to send message. Server closed the connection unexpectedly.`);
+                            if (debug) {
+                                console.debug('Server closed the connection unexpectedly, returning...');
+                            }
+                            // workaround for private API not sending [DONE] event
+                            if (!done) {
+                                onProgress('[DONE]');
+                                controller.abort();
+                                resolve();
+                            }
                         },
                         onerror(err) {
                             if (debug) {
@@ -104,6 +124,7 @@ export default class ChatGPTClient {
                                 onProgress('[DONE]');
                                 controller.abort();
                                 resolve();
+                                done = true;
                                 return;
                             }
                             onProgress(JSON.parse(message.data));
@@ -165,6 +186,9 @@ export default class ChatGPTClient {
                 if (this.options.debug) {
                     console.debug(token);
                 }
+                if (token === this.endToken) {
+                    return;
+                }
                 opts.onProgress(token);
                 reply += token;
             });
@@ -173,7 +197,7 @@ export default class ChatGPTClient {
             if (this.options.debug) {
                 console.debug(JSON.stringify(result));
             }
-            reply = result.choices[0].text;
+            reply = result.choices[0].text.replace(this.endToken, '');
         }
 
         // avoids some rendering issues when using the CLI app
@@ -230,7 +254,7 @@ export default class ChatGPTClient {
         while (currentTokenCount < maxTokenCount && orderedMessages.length > 0) {
             const message = orderedMessages.pop();
             const roleLabel = message.role === 'User' ? this.userLabel : this.chatGptLabel;
-            const messageString = `${roleLabel}:\n${message.message}${this.separatorToken}\n`;
+            const messageString = `${roleLabel}:\n${message.message}${this.endToken}\n`;
             let newPromptBody;
             if (promptBody) {
                 newPromptBody = `${messageString}${promptBody}`;

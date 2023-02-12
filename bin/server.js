@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import fs from 'fs';
 import { pathToFileURL } from 'url'
 import ChatGPTClient from '../src/ChatGPTClient.js';
+import BingAIClient from '../src/BingAIClient.js';
 import { KeyvFile } from 'keyv-file';
 import Keyv from 'keyv';
 
@@ -42,7 +43,6 @@ if (settings.storageFilePath && !settings.cacheOptions.store) {
 
     settings.cacheOptions.store = new KeyvFile({ filename: settings.storageFilePath });
 }
-
 if (settings.msgStorageFilePath && !settings.msgCacheOptions.store) {
     // make the directory and file if they don't exist
     const dir = settings.msgStorageFilePath.split('/').slice(0, -1).join('/');
@@ -58,7 +58,25 @@ if (settings.msgStorageFilePath && !settings.msgCacheOptions.store) {
 
 const messageCache = new Keyv(settings.msgCacheOptions);
 
-const chatGptClient = new ChatGPTClient(settings.openaiApiKey, settings.chatGptClient, settings.cacheOptions);
+const clientToUse = settings.apiOptions?.clientToUse || settings.clientToUse || 'chatgpt';
+
+let client;
+switch (clientToUse) {
+    case 'bing':
+        client = new BingAIClient({
+            userToken: settings.bingAiClient.userToken,
+            debug: settings.bingAiClient.debug,
+        });
+        break;
+    default:
+        client = new ChatGPTClient(
+            settings.openaiApiKey,
+            settings.chatGptClient,
+            settings.cacheOptions,
+        );
+        break;
+}
+
 
 const server = fastify();
 // configure CORS
@@ -117,9 +135,12 @@ server.post('/conversation', async (request, reply) => {
             }
         }
 
-        result = await chatGptClient.sendMessage(request.body.message, {
+        result = await client.sendMessage(body.message, {
             conversationId,
             parentMessageId,
+            conversationSignature: body.conversationSignature,
+            clientId: body.clientId,
+            invocationId: body.invocationId,
             onProgress,
         });
     } catch (e) {
@@ -142,7 +163,7 @@ server.post('/conversation', async (request, reply) => {
         } else if (settings.apiOptions?.debug) {
             console.debug(error);
         }
-        const message = error?.data?.message || 'There was an error communicating with ChatGPT.';
+        const message = error?.data?.message || `There was an error communicating with ${clientToUse === 'bing' ? 'Bing' : 'ChatGPT'}.`;
         if (body.stream === true) {
             reply.sse({
                 id: '',
